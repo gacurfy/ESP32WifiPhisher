@@ -86,13 +86,19 @@ typedef struct {
     uint8_t snonce[32];
     uint8_t mic[16];
     uint8_t pmkid[16];
-    uint8_t eapol_m1[256];
+    uint8_t eapol_m1[200];
     uint16_t eapol_m1_len;
-    uint8_t eapol[256];
-    uint16_t eapol_len;
+    uint8_t eapol_m2[200];
+    uint16_t eapol_m2_len;
+    uint8_t eapol_m3[256];
+    uint16_t eapol_m3_len;
+    uint8_t eapol_m4[200];
+    uint16_t eapol_m4_len;
     uint8_t key_decriptor_version;
     /* Capture information */
     int64_t last_m1_timestamp;
+    int64_t last_m2_timestamp;
+    int64_t last_m3_timestamp;
     uint64_t replay_counter;
     bool handshake_captured;
     bool pmkid_captured;

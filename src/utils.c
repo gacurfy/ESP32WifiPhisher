@@ -71,7 +71,7 @@ void print_handshake(handshake_info_t *handshake)
     printf("\nMIC: ");
     print_buffer(handshake->mic, sizeof(handshake->mic));
     printf("\nEAPOL: ");
-    print_buffer(handshake->eapol, handshake->eapol_len);
+    print_buffer(handshake->eapol_m2, handshake->eapol_m2_len);
     printf("\nKey Descriptor Version: %d", handshake->key_decriptor_version);
     printf("\n#####################\n");
 }
@@ -264,4 +264,28 @@ const char* resolve_mac_oui(const uint8_t mac[6])
         return result->vendor;
     }
     return "Unknown Vendor";
+}
+
+
+bool wifi_is_valid_channel(uint8_t channel) 
+{
+    if (channel >= 1 && channel <= 14) {
+        return true; 
+    }
+
+#if SOC_WIFI_SUPPORT_5G
+    switch (channel) {
+        case 36: case 40: case 44: case 48:
+        case 52: case 56: case 60: case 64:
+        case 100: case 104: case 108: case 112: case 116: case 120:
+        case 124: case 128: case 132: case 136: case 140: case 144:
+        case 149: case 153: case 157: case 161: case 165:
+            return true;
+    }
+#else
+    if (channel > 14) {
+        ESP_LOGW(TAG, "Channel %d not supported on this hardware", channel);
+    }
+#endif
+    return false;
 }

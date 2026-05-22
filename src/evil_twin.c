@@ -161,7 +161,7 @@ static void evil_twin_task(void *pvParameters)
                                     target->channel = aps.ap[i].record.primary;
                                     memcpy(target->bssid, aps.ap[i].record.bssid, 6);
                                     /* This will cause current STA to disconnect */
-                                    wifi_set_channel_safe(target->channel);
+                                    wifi_switch_ap_channel_csa(target->channel);
                                 }
                             }
                             else {
@@ -273,7 +273,7 @@ bool evil_twin_check_password(char *password)
 
     if( handshake.handshake_captured)
     {
-        return verify_password(password, (char *)&target.ssid, strlen((char *)&target.ssid), target.bssid, handshake.mac_sta, handshake.anonce, handshake.snonce, handshake.eapol, handshake.eapol_len, handshake.mic, handshake.key_decriptor_version);
+        return verify_password(password, (char *)&target.ssid, strlen((char *)&target.ssid), target.bssid, handshake.mac_sta, handshake.anonce, handshake.snonce, handshake.eapol_m2, handshake.eapol_m2_len, handshake.mic, handshake.key_decriptor_version);
     }
     if( handshake.pmkid_captured)
     {

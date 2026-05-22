@@ -993,12 +993,14 @@ static esp_err_t api_download_handshake(ws_frame_req_t *req)
     size_t rt_hdr_sz = 8;
     size_t beacon_sz = rt_hdr_sz + 24 + 12 + 2 + ssid_len;
     size_t m1_sz = rt_hdr_sz + 26 + 8 + hs.eapol_m1_len; 
-    size_t m2_sz = rt_hdr_sz + 26 + 8 + hs.eapol_len;
+    size_t m2_sz = rt_hdr_sz + 26 + 8 + hs.eapol_m2_len;
+    size_t m3_sz = rt_hdr_sz + 26 + 8 + hs.eapol_m3_len;
+    size_t m4_sz = rt_hdr_sz + 26 + 8 + hs.eapol_m4_len;
 
     // Se c'è solo il PMKID escludiamo M2 dal PCAP
     size_t total_sz = pcap_hdr_sz + (2 * pkt_hdr_sz) + beacon_sz + m1_sz;
     if (hs.handshake_captured) {
-        total_sz += pkt_hdr_sz + m2_sz;
+        total_sz += pkt_hdr_sz + m2_sz + pkt_hdr_sz + m3_sz + pkt_hdr_sz + m4_sz;
     }
 
     uint8_t *pcap = calloc(1, total_sz);
@@ -1023,7 +1025,7 @@ static esp_err_t api_download_handshake(ws_frame_req_t *req)
         uint32_t l = len; \
         memcpy(pcap + offset, &l, 4); offset += 4; \
         memcpy(pcap + offset, &l, 4); offset += 4; \
-        ts_usec += 10000; /* Incremento di 10 millisecondi */ \
+        ts_usec += 500000; /* Incremento di 10 millisecondi */ \
     } while(0)
 
     uint8_t rt_hdr[8] = {0x00, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -1071,7 +1073,39 @@ static esp_err_t api_download_handshake(ws_frame_req_t *req)
         };
         memcpy(pcap + offset, m2_mac_hdr, 26); offset += 26;
         memcpy(pcap + offset, llc, 8); offset += 8;
-        memcpy(pcap + offset, hs.eapol, hs.eapol_len); offset += hs.eapol_len;
+        memcpy(pcap + offset, hs.eapol_m2, hs.eapol_m2_len); offset += hs.eapol_m2_len;
+    }
+
+    // 3. M3 (Dal Router al Telefono) - Solo se catturato interamente
+    if (hs.handshake_captured) {
+        WRITE_PKT_HDR(m3_sz);
+        memcpy(pcap + offset, rt_hdr, 8); offset += 8;
+        uint8_t m3_mac_hdr[26] = {
+            0x88, 0x02, 0x00, 0x00,
+            hs.mac_sta[0], hs.mac_sta[1], hs.mac_sta[2], hs.mac_sta[3], hs.mac_sta[4], hs.mac_sta[5], // Dest=STA
+            hs.bssid[0], hs.bssid[1], hs.bssid[2], hs.bssid[3], hs.bssid[4], hs.bssid[5], // Src=BSSID
+            hs.bssid[0], hs.bssid[1], hs.bssid[2], hs.bssid[3], hs.bssid[4], hs.bssid[5], // BSSID
+            0x00, 0x00, 0x00, 0x00 //Fragmentation/Sequence Number
+        };
+        memcpy(pcap + offset, m3_mac_hdr, 26); offset += 26;
+        memcpy(pcap + offset, llc, 8); offset += 8;
+        memcpy(pcap + offset, hs.eapol_m3, hs.eapol_m3_len); offset += hs.eapol_m3_len;
+    }
+
+    // 4. M4 (Dal Telefono al Router) - Solo se catturato interamente
+    if (hs.handshake_captured) {
+        WRITE_PKT_HDR(m4_sz);
+        memcpy(pcap + offset, rt_hdr, 8); offset += 8;
+        uint8_t m4_mac_hdr[26] = {
+            0x88, 0x01, 0x00, 0x00,
+            hs.bssid[0], hs.bssid[1], hs.bssid[2], hs.bssid[3], hs.bssid[4], hs.bssid[5], // Dest=BSSID
+            hs.mac_sta[0], hs.mac_sta[1], hs.mac_sta[2], hs.mac_sta[3], hs.mac_sta[4], hs.mac_sta[5], // Src=STA
+            hs.bssid[0], hs.bssid[1], hs.bssid[2], hs.bssid[3], hs.bssid[4], hs.bssid[5], // BSSID
+            0x00, 0x00, 0x00, 0x00
+        };
+        memcpy(pcap + offset, m4_mac_hdr, 26); offset += 26;
+        memcpy(pcap + offset, llc, 8); offset += 8;
+        memcpy(pcap + offset, hs.eapol_m4, hs.eapol_m4_len); offset += hs.eapol_m4_len;
     }
 
     // BASE64

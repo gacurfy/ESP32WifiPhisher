@@ -18,7 +18,7 @@
 #include "karma_attack.h"
 #include "deauther.h"
 
-#define HANDSHAKE_TIMEOUT_US 2000000 // 2 Seconds timeout between M1 and M2
+#define HANDSHAKE_TIMEOUT_US 2000000 // 2 Seconds timeout between M1 and M2 and M3
 
 static const char *TAG = "SNIFFER";
 
@@ -516,7 +516,7 @@ static void wifi_sniffer_capture_aps(struct libwifi_frame *frame, sniffer_packet
                     strncpy((char *)new_ap->record.ssid, bss.ssid, 32);
                 }
                 else {
-                    strncpy(tmp, "Hidden SSID", 32);
+                    strncpy(tmp, "[Hidden SSID]", 32);
                 }
 
                 new_ap->record.rssi = rssi;
@@ -561,7 +561,7 @@ static void wifi_sniffer_capture_handshakes(struct libwifi_frame *frame, sniffer
     int msg_type = libwifi_check_wpa_message(frame);
     int64_t current_time = esp_timer_get_time(); // Time in microseconds
 
-    if (xSemaphoreTake(handshake_semaphore, pdMS_TO_TICKS(20)) == pdTRUE) 
+    if (xSemaphoreTake(handshake_semaphore, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE) 
     {
         /* --- HANDLE M1 (AP -> Station) --- */
         if (msg_type == HANDSHAKE_M1)
@@ -583,7 +583,7 @@ static void wifi_sniffer_capture_handshakes(struct libwifi_frame *frame, sniffer
                 memcpy(entry->bssid, bssid, 6);
                 memcpy(entry->mac_sta, dest_mac, 6);
                 //Get SSID from detected APs list
-                if (xSemaphoreTake(aps_semaphore, pdMS_TO_TICKS(50)) == pdTRUE) {
+                if (xSemaphoreTake(aps_semaphore, pdMS_TO_TICKS(portMAX_DELAY)) == pdTRUE) {
                     for (int ap_entry_id = 0; ap_entry_id < detected_aps.count; ap_entry_id++) {
                         if (memcmp(detected_aps.ap[ap_entry_id].record.bssid, bssid, 6) == 0) {
                             strncpy((char *)entry->ssid, (char *)detected_aps.ap[ap_entry_id].record.ssid, 32);
@@ -643,47 +643,98 @@ static void wifi_sniffer_capture_handshakes(struct libwifi_frame *frame, sniffer
 
             if (entry != NULL) 
             {
-                /* VALIDATION 1: Check Replay Counter */
-                /* The M2 counter MUST match the M1 counter. If not, it belongs to a different session. */
                 if (entry->replay_counter != wpa_data.key_info.replay_counter) {
                     ESP_LOGD(TAG, "M2 discarded: Replay Counter mismatch (M1:%llu != M2:%llu)", 
-                            entry->replay_counter, wpa_data.key_info.replay_counter);
-                    // FIX: Non usare goto per uscire dal blocco semaforo senza rilasciarlo
+                             entry->replay_counter, wpa_data.key_info.replay_counter);
                 }
-                /* VALIDATION 2: Check Timestamp (Timeout) */
-                /* If M1 is too old (e.g., > 2 seconds), discard M2 to avoid stale data */
                 else if ((current_time - entry->last_m1_timestamp) > HANDSHAKE_TIMEOUT_US) {
                     ESP_LOGD(TAG, "M2 discarded: M1 timeout");
                 }
                 else {
-                    /* Validation Passed: Store SNonce and MIC */
+                    entry->last_m2_timestamp = current_time;
                     memcpy(entry->snonce, wpa_data.key_info.nonce, 32);
                     memcpy(entry->mic, wpa_data.key_info.mic, 16);
 
-                    /* Extract Raw EAPOL frame (required for cracking tools like aircrack-ng) */
                     uint16_t raw_len = 0;
                     uint8_t *raw_ptr = find_eapol_frame(sniffer_pkt->payload, sniffer_pkt->length, &raw_len);
-                    
-                    if (raw_ptr && raw_len <= sizeof(entry->eapol)) {
-                        memcpy(entry->eapol, raw_ptr, raw_len);
-                        entry->eapol_len = raw_len;
-                        
-                        /* Zero out the MIC in the raw frame if needed (standard practice) */
-                        //if (entry->eapol_len > 81 + 16) {
-                        //    memset(entry->eapol + 81, 0, 16);
-                        //}
-
-                        if (!entry->handshake_captured) {
-                            entry->handshake_captured = true;
-                            ESP_LOGI(TAG, "Handshake (M1+M2) Captured! AP: %02X... Client: %02X...", bssid[0], src_mac[0]);
-                            ws_log(TAG, "Handshake (M1+M2) Captured! AP: %02X... Client: %02X...", bssid[0], src_mac[0]);
-                        }
+                    if (raw_ptr && raw_len <= sizeof(entry->eapol_m2)) {
+                        memcpy(entry->eapol_m2, raw_ptr, raw_len);
+                        entry->eapol_m2_len = raw_len;
                     }
                 }
             } 
-        } // if M1 or M2
-        xSemaphoreGive(handshake_semaphore); // FIX: Release correct semaphore!
-    } // Semaphore
+        } 
+        /* --- HANDLE M3 (AP -> STATION) --- */
+        else if (msg_type == HANDSHAKE_M3) 
+        {
+            /* Search for existing entry for this BSSID + STA pair */
+            handshake_info_t *entry = NULL;
+            for (int i = 0; i < captured_handshakes.count; i++) {
+                if (memcmp(captured_handshakes.handshake[i].bssid, bssid, 6) == 0 &&
+                    memcmp(captured_handshakes.handshake[i].mac_sta, dest_mac, 6) == 0) {
+                    entry = &captured_handshakes.handshake[i];
+                    break;
+                }
+            }
+
+            if (entry != NULL) 
+            {
+                if (wpa_data.key_info.replay_counter <= entry->replay_counter) {
+                    ESP_LOGD(TAG, "M3 discarded: Invalid Replay Counter");
+                }
+                else if ((current_time - entry->last_m2_timestamp) > HANDSHAKE_TIMEOUT_US) {
+                    ESP_LOGD(TAG, "M3 discarded: M2 timeout");
+                }
+                else {
+                    entry->last_m3_timestamp = current_time;
+                    uint16_t raw_len = 0;
+                    uint8_t *raw_ptr = find_eapol_frame(sniffer_pkt->payload, sniffer_pkt->length, &raw_len);
+                    if (raw_ptr && raw_len <= sizeof(entry->eapol_m3)) {
+                        memcpy(entry->eapol_m3, raw_ptr, raw_len);
+                        entry->eapol_m3_len = raw_len;
+                    }
+                    /* TRUCCO PRO: L'M3 contiene sempre l'ANonce definitivo della sessione. 
+                       Sovrascriviamo quello dell'M1 per correggere eventuali desincronizzazioni! */
+                    memcpy(entry->anonce, wpa_data.key_info.nonce, 32);
+                }
+            }
+        }
+        /* --- HANDLE M4 (STATION -> AP) --- */
+        else if (msg_type == HANDSHAKE_M4) 
+        {
+            /* Search for existing entry for this BSSID + STA pair */
+            handshake_info_t *entry = NULL;
+            for (int i = 0; i < captured_handshakes.count; i++) {
+                if (memcmp(captured_handshakes.handshake[i].bssid, bssid, 6) == 0 &&
+                    memcmp(captured_handshakes.handshake[i].mac_sta, src_mac, 6) == 0) {
+                    entry = &captured_handshakes.handshake[i];
+                    break;
+                }
+            }
+
+            if (entry != NULL) 
+            {
+                if (wpa_data.key_info.replay_counter <= entry->replay_counter) {
+                    ESP_LOGD(TAG, "M4 discarded: Invalid Replay Counter");
+                }
+                else if ((current_time - entry->last_m3_timestamp) > HANDSHAKE_TIMEOUT_US) {
+                    ESP_LOGD(TAG, "M4 discarded: M3 timeout");
+                }
+                else {
+                    uint16_t raw_len = 0;
+                    uint8_t *raw_ptr = find_eapol_frame(sniffer_pkt->payload, sniffer_pkt->length, &raw_len);
+                    if (raw_ptr && raw_len <= sizeof(entry->eapol_m4)) {
+                        memcpy(entry->eapol_m4, raw_ptr, raw_len);
+                        entry->eapol_m4_len = raw_len;
+                    }
+                    entry->handshake_captured = true;
+                    ESP_LOGI(TAG, "Full Handshake Captured! AP: "MACSTR" Client: "MACSTR"", MAC2STR(bssid), MAC2STR(dest_mac));
+                    ws_log(TAG, "Full Handshake Captured! AP: "MACSTR" Client: "MACSTR"", MAC2STR(bssid), MAC2STR(dest_mac));
+                }
+            }
+        }
+        xSemaphoreGive(handshake_semaphore);
+    }
 
     libwifi_free_wpa_data(&wpa_data);
 }
@@ -1100,6 +1151,11 @@ void wifi_sniffer_set_fine_filter(int type, uint32_t subtype, uint8_t channel)
     filter_type_main = type;
     filter_subtype_mask = subtype;
     filter_channel = channel;
+
+    // Switch to filter channel if specified (0 means all channels)
+    if (channel != 0) {
+        wifi_switch_ap_channel_csa(channel);
+    }
 
     wifi_promiscuous_filter_t filter = {0};
     filter.filter_mask = 0;

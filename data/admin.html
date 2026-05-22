@@ -1642,7 +1642,7 @@
                         pendingRequests.delete(id);
                         reject("Timeout waiting for ESP32");
                     }
-                }, 15000); 
+                }, 18000); 
             });
         }
 
@@ -1961,7 +1961,7 @@
                     const safeSsid = net.ssid.replace(/'/g, "\\'");
                     
                     tr.innerHTML = `
-                        <td style="font-weight:bold; ${(net.ssid && net.ssid.trim()) !== "" ? 'color:white;' : 'color:#666;'}">${(net.ssid && net.ssid.trim()) !== "" ? net.ssid : 'Hidden SSID'}</td>
+                        <td style="font-weight:bold; ${(net.ssid && net.ssid.trim()) !== "" ? 'color:white;' : 'color:#666;'}">${(net.ssid && net.ssid.trim()) !== "" ? net.ssid : '[Hidden SSID]'}</td>
                         <td>${net.signal}</td>
                         <td>${net.channel}</td>
                         <td style="font-family:monospace; font-size:0.85rem;">${net.bssid}</td>
@@ -2441,7 +2441,7 @@
             const captured = lastApsData.filter(ap => ap.hs > 0);
 
             if (captured.length === 0) {
-                bankBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">In ascolto sul canale radio... Nessun handshake rilevato.</td></tr>`;
+                bankBody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px; color:#666;">Listening on radio channel... No handshake captured yet.</td></tr>`;
                 return;
             }
 

@@ -125,4 +125,13 @@ void hex_dump_bytes(const char *tag, const uint8_t *buf, size_t len);
  */
 const char* resolve_mac_oui(const uint8_t mac[6]);
 
+
+/**
+ * @brief Check if a WiFi channel is valid for the current hardware
+ * 
+ * @param channel
+ * @return true
+ */
+bool wifi_is_valid_channel(uint8_t channel);
+
 #endif

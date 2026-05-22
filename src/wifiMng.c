@@ -344,16 +344,10 @@ void wifi_ap_clone(wifi_config_t *wifi_config, uint8_t *bssid)
 
 esp_err_t wifi_set_channel_safe(uint8_t new_channel)
 {
-    if( new_channel < 1 ) {
+    if(!wifi_is_valid_channel(new_channel)) {
+        ESP_LOGD(TAG, "Invalid channel %d, aborting channel switch", new_channel);
         return ESP_ERR_INVALID_ARG;
     }
-
-    #if !CONFIG_SOC_WIFI_SUPPORT_5G
-    if( new_channel > 14 ) {
-        ESP_LOGW(TAG, "CSA Target channel=%d, This device does not support 5G channels", new_channel);
-        return ESP_ERR_INVALID_ARG;
-    }
-    #endif
 
     uint8_t current_channel = 0;
     wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
@@ -387,6 +381,11 @@ esp_err_t wifi_set_temporary_channel(uint8_t new_channel, uint32_t window)
     uint8_t current_primary;
     wifi_second_chan_t current_secondary;
     esp_err_t err = esp_wifi_get_channel(&current_primary, &current_secondary);
+
+    if(!wifi_is_valid_channel(new_channel)) {
+        ESP_LOGD(TAG, "Invalid channel %d, aborting temporary channel switch", new_channel);
+        return ESP_ERR_INVALID_ARG;
+    }
     
     if (err != ESP_OK) return err;
     if (current_primary == new_channel) {
@@ -412,6 +411,12 @@ esp_err_t wifi_switch_ap_channel_csa(uint8_t new_channel)
     uint8_t current_primary;
     wifi_second_chan_t current_secondary;
     esp_err_t err = esp_wifi_get_channel(&current_primary, &current_secondary);
+
+    // Verify correct channel
+    if (!wifi_is_valid_channel(new_channel)) {
+        ESP_LOGD(TAG, "Invalid channel %d, aborting channel switch", new_channel);
+        return ESP_ERR_INVALID_ARG;
+    }
     
     if (err != ESP_OK) return err;
     if (current_primary == new_channel) {
