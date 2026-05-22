@@ -1,6 +1,10 @@
 #include <string.h>
+#include <esp_log.h>
 #include "oui_database.h"
 #include "utils.h"
+
+static const char *TAG = "UTILS";
+
 
 bool isMacBroadcast(const uint8_t *mac)
 {
