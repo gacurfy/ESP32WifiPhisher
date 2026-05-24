@@ -29,8 +29,9 @@ typedef enum {
     API_DOWNLOAD_HANDSHAKE,
     API_START_PACKET_ANALYZER,
     API_STOP_PACKET_ANALYZER,
+    API_GET_LAST_WIFI_CREDENTIALS,
     API_MAX_COMMAND
-} api_commant_t;
+} api_command_t;
 
 
 /**

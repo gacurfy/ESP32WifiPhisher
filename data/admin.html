@@ -1044,8 +1044,9 @@
                 </div>
                 
                 <div class="btn-group">
-                    <button onclick="connectSta()">CONNECT</button>
-                    <button class="secondary" onclick="disconnectSta()">DISCONNECT</button>
+                    <button onclick="connectSta()" data-i18n="btn_connect">CONNECT</button>
+                    <button class="secondary" onclick="disconnectSta()" data-i18n="btn_disconnect">DISCONNECT</button>
+                    <button class="secondary" onclick="getLastWifiCredential()" data-i18n="btn_get_last_target">GET LAST TARGET</button>
                 </div>
                 
                 <div style="margin-top:20px; font-size:0.85rem; padding: 15px; background: #121212; border-radius: 4px; border: 1px solid #333; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
@@ -1233,6 +1234,7 @@
             DOWNLOAD_HANDSHAKE: 20,
             START_PACKET_ANALYZER: 21,
             STOP_PACKET_ANALYZER: 22,
+            GET_LAST_WIFI_CREDENTIALS: 23,
         };
 
         // Stato globale
@@ -2568,6 +2570,25 @@
             showToast("Airodump Data Cleared");
             log("Airodump memory cleared.", "info");
         }
+        
+        async function getLastWifiCredential() {
+            try {
+                const res = await sendCommand(CMD.GET_LAST_WIFI_CREDENTIALS);
+                if (!res.ssid && !res.password) {
+                    showToast("Last wifi credentials not found.");
+                    log("Last wifi credentials not found.", "info");
+                    return;
+                }
+                const sta_ssid = document.getElementById('sta-ssid');
+                const sta_password = document.getElementById('sta-password');
+                sta_ssid.value = res.ssid || '';
+                sta_password.value = res.password || '';
+
+                showToast("Last wifi credentials loaded from memory.");
+                log("Last wifi credentials loaded from memory.", "info");
+            } catch(e) { console.warn("Last Wifi Credentials Fetch Error:", e); }
+        }
+        
         // ==========================================
         // INIT
         // ==========================================

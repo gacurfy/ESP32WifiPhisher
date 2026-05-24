@@ -22,7 +22,7 @@
 static const char *TAG = "SERVER_API";
 
 typedef struct {
-    api_commant_t cmd;
+    api_command_t cmd;
     esp_err_t (*handler)(ws_frame_req_t *req);
 } api_cmd_t;
 
@@ -943,6 +943,10 @@ static esp_err_t api_wifi_connect(ws_frame_req_t *req)
         return ESP_FAIL;
     }
 
+    /* Save last credentials */
+    save_string_to_nvs(WIFI_CONNECTION_LAST_SSID_KEY, ssid);
+    save_string_to_nvs(WIFI_CONNECTION_LAST_PASS_KEY, password);
+
     api_send_status_frame(req, "ok", "Connection Attempted");
     return ESP_OK;
 }
@@ -1158,6 +1162,39 @@ static esp_err_t api_stop_packet_analyzer(ws_frame_req_t *req)
 }
 
 
+static esp_err_t api_get_wifi_last_credentials(ws_frame_req_t *req)
+{
+    char ssid[32] = {0};
+    char password[64] = {0};
+    read_string_from_nvs(WIFI_CONNECTION_LAST_SSID_KEY, ssid);
+    read_string_from_nvs(WIFI_CONNECTION_LAST_PASS_KEY, password);
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "req_id", req->req_id);
+    cJSON_AddStringToObject(root, "type", "last_wifi_credentials");
+    cJSON_AddStringToObject(root, "ssid", ssid);
+    cJSON_AddStringToObject(root, "password", password);
+    char *json_response = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+
+    if (!json_response) return ESP_FAIL;
+
+    ws_frame_req_t cmd;
+    cmd.hd = req->hd;
+    cmd.fd = req->fd;
+    cmd.payload = json_response;
+    cmd.len = strlen(json_response);
+    cmd.need_free = true;
+
+    if (ws_send_command_to_queue(&cmd) != ESP_OK) {
+        free(json_response);
+        return ESP_FAIL;
+    }
+
+    return ESP_OK;
+}
+
+
 static const api_cmd_t api_cmd_list[] = {
     { API_GET_STATUS, api_get_status },
     { API_SET_AP_SETTINGS, api_admin_set_ap_settings },
@@ -1181,7 +1218,8 @@ static const api_cmd_t api_cmd_list[] = {
     { API_WIFI_DISCONNECT, api_wifi_disconnect },
     { API_DOWNLOAD_HANDSHAKE, api_download_handshake },
     { API_START_PACKET_ANALYZER, api_start_packet_analyzer },
-    { API_STOP_PACKET_ANALYZER, api_stop_packet_analyzer }
+    { API_STOP_PACKET_ANALYZER, api_stop_packet_analyzer },
+    { API_GET_LAST_WIFI_CREDENTIALS, api_get_wifi_last_credentials }
 };
 
 
