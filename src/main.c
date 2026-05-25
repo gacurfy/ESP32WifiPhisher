@@ -10,6 +10,7 @@
 #include "portmap.h"
 #include "networking.h"
 #include "sniffer.h"
+#include "console.h"
 
 /**
  * @brief Block system when an unrecoverable error occurs.
@@ -96,6 +97,8 @@ void app_main()
         .trigger_panic = false
     };
     ESP_ERROR_CHECK(esp_task_wdt_init(&wdt_conf));
+
+    //console_init();
 
     /* Suspend main task */
     vTaskSuspend(NULL); 
